@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
-/* ------------------------------------------------------------------
- * Brand tokens — see docs/SECURITY.md §4 (CSP) for asset policy
- * ------------------------------------------------------------------ */
+/* =================================================================
+ * KeyhanGold — light theme (GSM.ir-inspired).
+ * No auto dark mode. Vazirmatn font is injected by next/font/google
+ * via layout.tsx (variable --font-vazir).
+ * ================================================================= */
+
 @theme {
   --color-primary: #2D87F0;
   --color-primary-hover: #1B6FD9;
@@ -12,19 +15,22 @@
   --color-secondary-hover: #6644EB;
   --color-secondary-light: #F1ECFF;
 
-  --color-bg: #FFFFFF;
-  --color-bg-alt: #F7F8FA;
+  --color-bg: #F7F8FA;
+  --color-bg-alt: #FFFFFF;
   --color-card: #FFFFFF;
   --color-border: #E5E7EB;
+  --color-border-strong: #CBD5E1;
 
   --color-footer: #1A2540;
   --color-footer-text: #B8C2D9;
+  --color-footer-heading: #FFFFFF;
 
   --color-text: #111827;
   --color-text-muted: #6B7280;
   --color-text-link: #2D87F0;
 
   --color-gold: #D4AF37;
+  --color-gold-deep: #B7942C;
   --color-gold-light: #FFF6DA;
 
   --color-success: #16A34A;
@@ -32,9 +38,10 @@
   --color-danger: #DC2626;
   --color-danger-light: #FEE2E2;
   --color-warning: #F59E0B;
+  --color-warning-light: #FEF3C7;
 
-  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-card-hover: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-card-hover: 0 8px 24px rgba(16, 24, 40, 0.10);
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -42,49 +49,27 @@
   --radius-xl: 24px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #0E1218;
-    --color-bg-alt: #161B22;
-    --color-card: #1A2028;
-    --color-border: #2A323D;
-    --color-text: #E6E8EB;
-    --color-text-muted: #8B94A3;
-  }
-}
-
-/* IRANSans X / IRANYekan — drop the woff2 files into /public/fonts */
-@font-face {
-  font-family: "IRANSans X";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/IRANSansX-Regular.woff2") format("woff2");
-}
-@font-face {
-  font-family: "IRANSans X";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/IRANSansX-Medium.woff2") format("woff2");
-}
-@font-face {
-  font-family: "IRANSans X";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/IRANSansX-Bold.woff2") format("woff2");
-}
-
 html, body {
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: "IRANSans X", "Vazirmatn", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-vazir), "Vazirmatn", "Tahoma", system-ui,
+               -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  border-color: var(--color-border);
-}
+* { border-color: var(--color-border); }
 
-/* Hide scrollbar bling on price ticker */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
 .ticker { mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent); }
+
+.carousel-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bg-hero-gold   { background: linear-gradient(135deg, #FFF6DA 0%, #FFE9B0 50%, #F4D77F 100%); }
+.bg-hero-blue   { background: linear-gradient(135deg, #E8F2FD 0%, #C7E0FA 50%, #93C0F4 100%); }
+.bg-hero-purple { background: linear-gradient(135deg, #F1ECFF 0%, #DCD0FF 50%, #B59CFF 100%); }

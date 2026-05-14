@@ -25,12 +25,13 @@ def _generate_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def request_otp(phone: str, purpose: str = "login") -> None:
+def request_otp(phone: str, purpose: str = "login") -> str:
     """Generate, persist (hashed), and SMS-deliver a 6-digit OTP.
 
-    The plaintext code is sent only over SMS via Kavenegar; it is NOT
-    returned to the caller. The hashed copy lives in `OTPCode` for
-    verification.
+    Returns the plaintext code. Callers MUST treat this value as a secret;
+    the production OTP view drops it on the floor. The view re-exposes it
+    in the response body **only** when `settings.DEBUG` is True so a
+    developer without a Kavenegar account can complete the flow.
     """
     code = _generate_code()
     OTPCode.objects.create(
@@ -45,6 +46,7 @@ def request_otp(phone: str, purpose: str = "login") -> None:
         target={"type": "phone", "id": hash_sha256(phone)[:16]},
         data={"purpose": purpose},
     )
+    return code
 
 
 def verify_otp(phone: str, code: str, purpose: str = "login") -> bool:

@@ -45,16 +45,19 @@ class OTPRequestView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        from django.conf import settings as _settings
+
         s = PhoneSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        otp_svc.request_otp(s.validated_data["phone"], purpose="login")
-        # The code itself is never returned in the response — it is sent by
-        # SMS. The Kavenegar response acknowledges delivery via the
-        # `accounts.otp.delivered` event in Kibana.
-        return Response(
-            {"detail": "کد به شماره موبایل ارسال شد."},
-            status=status.HTTP_202_ACCEPTED,
-        )
+        phone = s.validated_data["phone"]
+        code = otp_svc.request_otp(phone, purpose="login")
+        body: dict[str, str] = {"detail": "کد یک‌بارمصرف ارسال شد."}
+        # In DEBUG mode (and only then) we echo the code back so a developer
+        # without a Kavenegar account can complete the flow end-to-end.
+        # Production responses NEVER contain the code.
+        if _settings.DEBUG and code:
+            body["debug_code"] = code
+        return Response(body, status=status.HTTP_202_ACCEPTED)
 
 
 class OTPVerifyView(APIView):

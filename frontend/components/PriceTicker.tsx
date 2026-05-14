@@ -1,47 +1,66 @@
 "use client";
+
 import { useEffect, useState } from "react";
 
 import { toPersianNumber } from "@/lib/format";
 
 type Snapshot = Record<string, number>;
 
-const LABELS: Record<string, string> = {
-  gold_18k_750: "هر گرم طلای ۱۸",
-  silver_999: "هر گرم نقره ۹۹۹",
-  coin_emami: "سکه امامی",
-  coin_bahar: "سکه بهار",
-  usd_free: "دلار آزاد",
-};
+const ITEMS: { key: string; label: string }[] = [
+  { key: "gold_18k_750", label: "هر گرم طلای ۱۸" },
+  { key: "silver_999", label: "هر گرم نقره ۹۹۹" },
+  { key: "coin_emami", label: "سکه امامی" },
+  { key: "coin_bahar", label: "سکه بهار" },
+  { key: "coin_half", label: "نیم سکه" },
+  { key: "ons_gold", label: "اونس جهانی" },
+  { key: "usd_free", label: "دلار آزاد" },
+];
 
 export function PriceTicker() {
   const [data, setData] = useState<Snapshot>({});
 
   useEffect(() => {
+    // Initial snapshot from REST so the bar shows numbers even before WS connects.
+    fetch("/api/v1/prices", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j?.data && setData((p) => ({ ...p, ...j.data })))
+      .catch(() => null);
+
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${window.location.host}/ws/prices/`);
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data) as { type: string; data: Snapshot };
-        if (msg.data) setData((prev) => ({ ...prev, ...msg.data }));
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    return () => ws.close();
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(`${proto}://${window.location.host}/ws/prices/`);
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data) as { data?: Snapshot };
+          if (msg.data) setData((p) => ({ ...p, ...msg.data }));
+        } catch {
+          /* ignore */
+        }
+      };
+    } catch {
+      /* WS optional */
+    }
+    return () => ws?.close();
   }, []);
 
   return (
-    <div className="ticker overflow-hidden bg-[var(--color-bg-alt)] border-b border-[var(--color-border)]">
-      <div className="flex gap-6 px-4 py-1 text-xs text-[var(--color-text-muted)] whitespace-nowrap">
-        {Object.entries(LABELS).map(([key, label]) => (
-          <span key={key} className="inline-flex items-center gap-1">
-            <span>{label}:</span>
-            <span className="font-medium text-[var(--color-text)]">
-              {data[key] ? toPersianNumber(Math.floor(data[key] / 10).toLocaleString("fa-IR")) : "—"}
+    <div className="ticker overflow-hidden bg-[var(--color-footer)] text-white border-b border-black/30">
+      <div className="container mx-auto flex gap-6 px-4 py-1.5 text-[11px] whitespace-nowrap no-scrollbar overflow-x-auto">
+        {ITEMS.map(({ key, label }) => {
+          const v = data[key];
+          return (
+            <span key={key} className="inline-flex items-center gap-1.5">
+              <span className="text-white/60">{label}:</span>
+              <span className="font-semibold text-[var(--color-gold)]">
+                {v
+                  ? toPersianNumber(Math.floor(v / 10).toLocaleString("fa-IR"))
+                  : "—"}
+              </span>
+              <span className="text-white/60">تومان</span>
             </span>
-            <span>تومان</span>
-          </span>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

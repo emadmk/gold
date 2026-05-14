@@ -9,18 +9,34 @@ from .models import KYCSubmission, User
 
 PHONE_RE = re.compile(r"^09\d{9}$")
 
+# Persian + Arabic-Indic digits → Latin digits
+_DIGIT_MAP = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def _normalise_digits(value: str) -> str:
+    return value.strip().translate(_DIGIT_MAP)
+
 
 class PhoneSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=11)
 
     def validate_phone(self, value: str) -> str:
+        value = _normalise_digits(value)
         if not PHONE_RE.match(value):
-            raise serializers.ValidationError("شماره موبایل معتبر نیست")
+            raise serializers.ValidationError(
+                "شماره موبایل باید با ۰۹ شروع شود و ۱۱ رقم باشد."
+            )
         return value
 
 
 class OTPVerifySerializer(PhoneSerializer):
-    code = serializers.RegexField(regex=r"^\d{6}$")
+    code = serializers.CharField(min_length=6, max_length=6)
+
+    def validate_code(self, value: str) -> str:
+        value = _normalise_digits(value)
+        if not value.isdigit() or len(value) != 6:
+            raise serializers.ValidationError("کد باید ۶ رقم باشد.")
+        return value
 
 
 class UserSerializer(serializers.ModelSerializer):
