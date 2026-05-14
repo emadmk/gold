@@ -1,0 +1,34 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+        permissionsPolicy: "geolocation=(), microphone=(), camera=(self), payment=()"
+        customResponseHeaders:
+          Cross-Origin-Opener-Policy: same-origin
+          Cross-Origin-Resource-Policy: same-origin
+          Content-Security-Policy: >-
+            default-src 'self';
+            img-src 'self' data: https:;
+            script-src 'self';
+            style-src 'self' 'unsafe-inline';
+            font-src 'self' data:;
+            connect-src 'self' wss:;
+            frame-ancestors 'none';
+            base-uri 'none';
+            form-action 'self'
+
+  routers: {}
+  services: {}
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS13
+      sniStrict: true

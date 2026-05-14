@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/__pycache__
+**/.venv
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+docker/data
+docker/volumes
+*.log
+.idea
+.vscode
