@@ -1,0 +1,23 @@
+-r base.txt
+
+# --- Tests ---
+pytest>=8.3
+pytest-django>=4.9
+pytest-asyncio>=0.24
+pytest-cov>=5.0
+factory-boy>=3.3
+faker>=28.0
+freezegun>=1.5
+responses>=0.25
+
+# --- Lint / type ---
+ruff>=0.6
+mypy>=1.11
+django-stubs[compatible-mypy]>=5.0
+djangorestframework-stubs>=3.15
+types-requests>=2.32
+
+# --- Dev tools ---
+django-debug-toolbar>=4.4
+django-extensions>=3.2
+ipython>=8.26

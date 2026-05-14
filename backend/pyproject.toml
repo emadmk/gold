@@ -1,0 +1,41 @@
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W", "I", "B", "C4", "UP", "N", "S", "A", "DJ", "PL", "RUF",
+]
+ignore = [
+  "S101",      # asserts are fine in tests
+  "PLR0913",   # many args are OK in DRF
+  "DJ001",     # null=True on string fields is sometimes correct
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "PLR2004"]
+"**/migrations/*" = ["E501", "N806"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+exclude = ["migrations/"]
+
+[tool.django-stubs]
+django_settings_module = "core.settings.dev"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "core.settings.test"
+python_files = ["tests.py", "test_*.py", "*_test.py"]
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests", "apps"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["apps", "core"]
+omit = ["*/migrations/*", "*/tests/*"]
