@@ -191,13 +191,41 @@ services:
     restart: always
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-    volumes: ["grafana-data:/var/lib/grafana"]
+      ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)
       - traefik.http.routers.grafana.entrypoints=websecure
       - traefik.http.routers.grafana.tls.certresolver=le
       - traefik.http.services.grafana.loadbalancer.server.port=3000
+
+  es-bootstrap:
+    image: curlimages/curl:8.10.1
+    depends_on: [elasticsearch]
+    environment:
+      ES_URL: http://elasticsearch:9200
+      ES_USER: elastic
+      ES_PASS: ${ELASTICSEARCH_PASSWORD}
+    volumes:
+      - ./docker/elasticsearch:/bootstrap:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["sleep 30 && /bootstrap/bootstrap.sh"]
+    restart: "no"
+
+  kibana-bootstrap:
+    image: curlimages/curl:8.10.1
+    depends_on: [kibana]
+    environment:
+      KIBANA_URL: http://kibana:5601
+    volumes:
+      - ./docker/kibana:/bootstrap:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["sleep 45 && /bootstrap/import.sh"]
+    restart: "no"
 
 volumes:
   postgres-data:

@@ -14,17 +14,28 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -r backend/requirements/dev.txt
+      - name: Install
+        run: pip install -r backend/requirements/dev.txt
       - name: Catalogue + SM coverage
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings.test
         run: |
-          cd backend
-          DJANGO_SETTINGS_MODULE=core.settings.test python -m apps.audit.checks catalogue
-          DJANGO_SETTINGS_MODULE=core.settings.test python -m apps.audit.checks event_coverage
-          DJANGO_SETTINGS_MODULE=core.settings.test python -m apps.audit.checks sm_coverage
+          python -m apps.audit.checks catalogue
+          python -m apps.audit.checks event_coverage
+          python -m apps.audit.checks sm_coverage
+      - name: Seam check
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings.test
+        run: python scripts/seam_check.py
       - name: Ruff
-        run: cd backend && ruff check apps core
+        working-directory: backend
+        run: ruff check apps core
       - name: Tests
-        run: cd backend && pytest -q
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings.test
+        run: pytest -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -35,6 +46,40 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: cd frontend && npm ci || npm install
-      - run: cd frontend && npm run typecheck || true
-      - run: cd frontend && npm run lint || true
+      - name: Install
+        working-directory: frontend
+        run: npm install
+      - name: TypeScript
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint || true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements/base.txt || true
+      - name: bandit
+        run: |
+          pip install bandit
+          bandit -r backend/apps backend/core || true
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+        continue-on-error: true

@@ -1,0 +1,38 @@
+{
+  "uid": "keyhan-security",
+  "title": "KeyhanGold — Security",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Rate-limit breaches",
+      "datasource": "Elasticsearch",
+      "targets": [{
+        "metrics": [{ "type": "count", "id": "1" }],
+        "bucketAggs": [
+          { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "5m" } }
+        ],
+        "query": "event.kind:security.ratelimit.breach"
+      }],
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Login brute-force events",
+      "datasource": "Elasticsearch",
+      "targets": [{
+        "metrics": [{ "type": "count", "id": "1" }],
+        "bucketAggs": [
+          { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "5m" } }
+        ],
+        "query": "event.kind:security.login.brute_force"
+      }],
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
+    }
+  ]
+}
