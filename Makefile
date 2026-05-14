@@ -1,4 +1,4 @@
-.PHONY: help up down logs ps backend frontend migrate seed test lint observability-check security-check seam-check es-bootstrap kibana-import all-checks
+.PHONY: help up down logs ps backend frontend migrate seed test lint observability-check security-check seam-check es-bootstrap kibana-import all-checks fresh-db crawl-prices
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?##' '{printf "  %-22s %s\n", $$1, $$2}'
@@ -8,6 +8,18 @@ up:  ## Bring the dev stack up
 
 down:  ## Stop the dev stack
 	docker compose -f compose.dev.yml down
+
+fresh-db:  ## NUKE volumes + rebuild + migrate + seed (loses data!)
+	docker compose -f compose.dev.yml down -v
+	docker compose -f compose.dev.yml up -d
+	@echo "Waiting for Postgres to be ready..."
+	@sleep 10
+	docker compose -f compose.dev.yml exec backend python manage.py migrate
+	docker compose -f compose.dev.yml exec backend python manage.py seed_dev
+
+crawl-prices:  ## Run the live-price crawler synchronously
+	docker compose -f compose.dev.yml exec backend python -c \
+	    "from apps.pricing.tasks import crawl_all; print(crawl_all())"
 
 logs:  ## Tail backend logs
 	docker compose -f compose.dev.yml logs -f backend
