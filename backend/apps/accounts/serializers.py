@@ -45,7 +45,9 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "phone", "email", "first_name", "last_name",
             "is_verified", "is_phone_verified", "is_vendor",
-            "tier", "two_factor_enabled", "created_at",
+            "is_staff", "is_superuser", "is_frozen",
+            "tier", "two_factor_enabled", "share_trades",
+            "created_at",
         ]
         read_only_fields = fields
 

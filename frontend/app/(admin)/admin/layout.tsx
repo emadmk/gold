@@ -56,9 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // me.status === "authenticated"
-  const isStaff =
-    Boolean((me.user as unknown as { is_staff?: boolean }).is_staff) ||
-    Boolean((me.user as unknown as { is_superuser?: boolean }).is_superuser);
+  const isStaff = me.user.is_staff || me.user.is_superuser;
 
   if (!isStaff) {
     return (

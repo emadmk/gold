@@ -42,13 +42,19 @@ export type Wallet = {
 export type User = {
   id: string;
   phone: string;
+  email: string | null;
   first_name: string;
   last_name: string;
   is_verified: boolean;
   is_phone_verified: boolean;
   is_vendor: boolean;
+  is_staff: boolean;
+  is_superuser: boolean;
+  is_frozen: boolean;
   tier: string;
   two_factor_enabled: boolean;
+  share_trades: boolean;
+  created_at: string;
 };
 
 export type Order = {
