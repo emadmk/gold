@@ -142,9 +142,22 @@ export default function CartPage() {
   const [err, setErr] = useState<string | null>(null);
   const [code, setCode] = useState("");
 
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
   async function load() {
+    setErr(null);
     try {
-      setCart(await api<Cart>("/cart"));
+      const r = await fetch("/api/v1/cart", { credentials: "include" });
+      if (r.status === 401 || r.status === 403) {
+        setAuthed(false);
+        return;
+      }
+      if (!r.ok) {
+        setErr(`HTTP ${r.status}`);
+        return;
+      }
+      setAuthed(true);
+      setCart((await r.json()) as Cart);
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -183,6 +196,27 @@ export default function CartPage() {
     }
   }
 
+  if (authed === false) {
+    return (
+      <>
+        <Header />
+        <main className="container mx-auto px-4 py-20 max-w-md text-center space-y-3">
+          <div className="text-6xl">🛒</div>
+          <h1 className="text-xl font-bold">برای مشاهده‌ی سبد خرید وارد شوید</h1>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            سبد خرید شما نزد KeyhanGold امن نگه‌داری می‌شود و قیمت‌ها برای ۶ دقیقه قفل می‌شوند.
+          </p>
+          <Link
+            href="/login?next=/cart"
+            className="inline-block px-6 py-3 rounded-xl bg-[var(--color-primary)] text-white font-medium"
+          >
+            ورود / ثبت‌نام
+          </Link>
+        </main>
+        <Footer />
+      </>
+    );
+  }
   if (!cart) {
     return (
       <>

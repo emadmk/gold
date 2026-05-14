@@ -65,7 +65,8 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await call("/auth/otp/verify", { phone, code });
-      window.location.href = "/dashboard";
+      const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+      window.location.href = next.startsWith("/") ? next : "/dashboard";
     } catch (e) {
       setError((e as Error).message);
     } finally {

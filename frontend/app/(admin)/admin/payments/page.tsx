@@ -1,5 +1,7 @@
-import { Footer } from "@/components/Footer";
-import { Header } from "@/components/Header";
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardBody } from "@/components/ui/Card";
 import { api } from "@/lib/api";
@@ -11,6 +13,7 @@ type Payment = {
   gateway: string;
   amount_rial: number;
   state: string;
+  authority: string;
   ref_id: string;
   card_pan_masked: string;
   created_at: string;
@@ -25,41 +28,53 @@ const TONE: Record<string, "primary" | "success" | "warning" | "danger" | "neutr
   expired: "warning",
 };
 
-export default async function AdminPaymentsPage() {
-  let r: { results: Payment[] } | null = null;
-  try {
-    r = await api<{ results: Payment[] }>("/admin/payments", { cache: "no-store" });
-  } catch {
-    r = null;
-  }
-  const list = r?.results ?? [];
+const GATEWAY_LABEL: Record<string, string> = {
+  zarinpal: "زرین‌پال",
+  idpay: "آیدی‌پی",
+  payping: "پی‌پینگ",
+  snappay: "اسنپ‌پی",
+  gsmpay: "جی‌اس‌ام‌پی",
+};
+
+export default function AdminPaymentsPage() {
+  const [list, setList] = useState<Payment[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ results: Payment[] }>("/admin/payments")
+      .then((r) => setList(r.results ?? []))
+      .catch((e) => setErr((e as Error).message));
+  }, []);
+
   return (
-    <>
-      <Header />
-      <main className="container mx-auto px-4 py-10 max-w-5xl">
-        <h1 className="text-2xl font-bold mb-4">تراکنش‌های درگاه</h1>
-        {list.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">
-            تراکنشی ثبت نشده.
-          </p>
-        ) : (
-          list.map((p) => (
-            <Card key={p.id} className="mb-2">
-              <CardBody className="flex justify-between text-sm">
-                <span dir="ltr">{p.gateway}</span>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">تراکنش‌های درگاه</h1>
+      {err && <Card><CardBody className="text-sm text-[var(--color-danger)]">{err}</CardBody></Card>}
+
+      {list.length === 0 ? (
+        <Card>
+          <CardBody className="text-sm text-[var(--color-text-muted)] text-center py-8">
+            هیچ تراکنشی ثبت نشده است.
+          </CardBody>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {list.map((p) => (
+            <Card key={p.id}>
+              <CardBody className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs items-center">
+                <span>{GATEWAY_LABEL[p.gateway] ?? p.gateway}</span>
                 <Badge tone={TONE[p.state] ?? "neutral"}>{p.state}</Badge>
-                <span>{formatRial(p.amount_rial)}</span>
-                <span dir="ltr" className="text-xs">{p.ref_id || "—"}</span>
-                <span dir="ltr" className="text-xs">{p.card_pan_masked || "—"}</span>
-                <span className="text-xs">
+                <span className="font-bold text-sm">{formatRial(p.amount_rial)}</span>
+                <span dir="ltr" className="truncate" title={p.ref_id}>{p.ref_id || "—"}</span>
+                <span dir="ltr" className="truncate">{p.card_pan_masked || "—"}</span>
+                <span className="text-[var(--color-text-muted)]">
                   {new Date(p.created_at).toLocaleString("fa-IR")}
                 </span>
               </CardBody>
             </Card>
-          ))
-        )}
-      </main>
-      <Footer />
-    </>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
