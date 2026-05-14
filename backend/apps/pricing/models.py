@@ -36,7 +36,9 @@ class PricingFormula(models.Model):
     """Coefficient registry — every coefficient is editable from the admin."""
 
     key = models.CharField(max_length=80, unique=True)
-    value = models.DecimalField(max_digits=18, decimal_places=8)
+    # max_digits=24 gives 16 integer digits (≈ 10^16, more than enough for
+    # any rial threshold including aml_threshold_rial = 10_000_000_000).
+    value = models.DecimalField(max_digits=24, decimal_places=8)
     description = models.CharField(max_length=255, blank=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
