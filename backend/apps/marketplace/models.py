@@ -8,6 +8,9 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+# Re-export the settlement model so Django sees it as part of this app
+from .settlements import VendorSettlement  # noqa: F401
+
 
 class Vendor(models.Model):
     STATES = [

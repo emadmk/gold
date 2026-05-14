@@ -59,18 +59,27 @@ _r("pricing.source.failover", "system", default_severity="warning")
 for k in (
     "wallet.rial.deposit",
     "wallet.rial.withdraw",
+    "wallet.rial.adjustment",
+    "wallet.rial.refund",
     "wallet.rial.locked",
     "wallet.rial.unlocked",
     "wallet.gold.buy",
     "wallet.gold.sell",
+    "wallet.gold.transfer",
+    "wallet.gold.delivery",
+    "wallet.gold.adjustment",
     "wallet.gold.locked",
     "wallet.gold.unlocked",
     "wallet.silver.buy",
     "wallet.silver.sell",
+    "wallet.silver.transfer",
+    "wallet.silver.delivery",
+    "wallet.silver.adjustment",
     "wallet.transfer.out",
     "wallet.transfer.in",
     "wallet.yield.payout",
     "wallet.adjustment",
+    "wallet.commission",
 ):
     _r(k, "domain")
 

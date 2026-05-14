@@ -20,6 +20,7 @@ from .serializers import (
 )
 from .services import kyc as kyc_svc
 from .services import otp as otp_svc
+from .services import totp as totp_svc
 
 
 def _set_jwt_cookies(response: Response, refresh: RefreshToken) -> Response:
@@ -49,7 +50,7 @@ class OTPRequestView(APIView):
         debug_code = otp_svc.request_otp(s.validated_data["phone"], purpose="login")
         body: dict[str, str] = {"detail": "کد به شماره موبایل ارسال شد."}
         if debug_code:
-            body["debug_code"] = debug_code  # only in non-prod
+            body["debug_code"] = debug_code
         return Response(body, status=status.HTTP_202_ACCEPTED)
 
 
@@ -65,6 +66,9 @@ class OTPVerifyView(APIView):
             return Response({"detail": "کد وارد شده صحیح یا معتبر نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
         user, created = otp_svc.upsert_user(phone)
+        # Make sure wallets exist on first login
+        from apps.wallet.services import ensure_wallets
+        ensure_wallets(user)
         refresh = RefreshToken.for_user(user)
         resp = Response(
             {"user": UserSerializer(user).data, "is_new": created},
@@ -103,6 +107,15 @@ class LogoutView(APIView):
 class MeView(APIView):
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        u = request.user
+        for f in ("first_name", "last_name", "email", "address", "postal_code",
+                  "father_name", "share_trades"):
+            if f in request.data:
+                setattr(u, f, request.data[f])
+        u.save()
+        return Response(UserSerializer(u).data)
 
 
 class KYCView(APIView):
@@ -150,3 +163,49 @@ class KYCAdminRejectView(APIView):
         reason = request.data.get("reason", "")
         kyc_svc.reject(sub, reviewer=request.user, reason=reason)
         return Response(KYCSubmissionSerializer(sub).data)
+
+
+# ---------------------------------------------------------------------------
+# 2FA (TOTP)
+# ---------------------------------------------------------------------------
+
+class TwoFactorEnrollView(APIView):
+    """Generate a TOTP secret and provisioning URI for the user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.two_factor_enabled:
+            return Response({"detail": "۲FA پیش‌تر فعال شده است."}, status=400)
+        secret = totp_svc.generate_secret()
+        request.user.two_factor_secret = secret
+        request.user.save(update_fields=["two_factor_secret"])
+        uri = totp_svc.provisioning_uri(secret, request.user.phone)
+        return Response({"secret": secret, "otpauth": uri})
+
+
+class TwoFactorConfirmView(APIView):
+    """Confirm the enrollment by verifying a fresh code."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code = request.data.get("code", "")
+        if not totp_svc.verify(request.user.two_factor_secret, code):
+            return Response({"detail": "کد TOTP نامعتبر است."}, status=400)
+        request.user.two_factor_enabled = True
+        request.user.save(update_fields=["two_factor_enabled"])
+        return Response({"detail": "تأیید دوعاملی فعال شد."})
+
+
+class TwoFactorDisableView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        code = request.data.get("code", "")
+        if not totp_svc.verify(request.user.two_factor_secret, code):
+            return Response({"detail": "کد TOTP نامعتبر است."}, status=400)
+        request.user.two_factor_enabled = False
+        request.user.two_factor_secret = ""
+        request.user.save(update_fields=["two_factor_enabled", "two_factor_secret"])
+        return Response({"detail": "تأیید دوعاملی غیرفعال شد."})

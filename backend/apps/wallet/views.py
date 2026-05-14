@@ -1,11 +1,10 @@
 """Wallet API views."""
 from __future__ import annotations
 
-from rest_framework import status
+from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import generics
 
 from apps.accounts.permissions import IsKYCVerified
 
@@ -15,7 +14,7 @@ from .serializers import (
     RialWalletSerializer,
     WalletTransactionSerializer,
 )
-from .services import ensure_wallets
+from .services import InsufficientFunds, ensure_wallets
 
 
 class WalletOverviewView(APIView):
@@ -69,3 +68,38 @@ class WithdrawOTPRequestView(APIView):
 
         otp_svc.request_otp(request.user.phone, purpose="withdraw")
         return Response({"detail": "کد تأیید برداشت ارسال شد."})
+
+
+class TransferOTPRequestView(APIView):
+    permission_classes = [IsAuthenticated, IsKYCVerified]
+
+    def post(self, request):
+        from apps.accounts.services import otp as otp_svc
+
+        otp_svc.request_otp(request.user.phone, purpose="transfer")
+        return Response({"detail": "کد تأیید انتقال ارسال شد."})
+
+
+class TransferView(APIView):
+    """Transfer gold/silver to another wallet by address. OTP-gated."""
+
+    permission_classes = [IsAuthenticated, IsKYCVerified]
+
+    def post(self, request):
+        from .transfer import transfer
+
+        asset = request.data.get("asset", "gold")
+        try:
+            mg = int(request.data.get("mg", 0))
+        except (TypeError, ValueError):
+            return Response({"detail": "مقدار نامعتبر است."}, status=400)
+        address = request.data.get("to_address", "")
+        otp = request.data.get("otp", "")
+        try:
+            out, _ = transfer(
+                sender=request.user, recipient_address=address,
+                asset=asset, mg=mg, otp_code=otp,
+            )
+        except (ValueError, InsufficientFunds, PermissionError) as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(WalletTransactionSerializer(out).data, status=status.HTTP_201_CREATED)

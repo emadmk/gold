@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import setup_logging, task_prerun, task_postrun, task_failure
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings.dev")
@@ -11,6 +12,40 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings.dev")
 app = Celery("keyhan")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+
+# Beat schedule — declared once so it survives migrations of the
+# django-celery-beat table. Anything operational (yield, AML, reconcile,
+# settlements, order expiry, pricing) is here.
+app.conf.beat_schedule = {
+    "pricing.crawl_all": {
+        "task": "pricing.crawl_all",
+        "schedule": 30.0,
+    },
+    "orders.expire_due": {
+        "task": "orders.expire_due",
+        "schedule": 60.0,
+    },
+    "wallet.consistency_tick": {
+        "task": "wallet.consistency_tick",
+        "schedule": 300.0,
+    },
+    "audit.reconcile": {
+        "task": "audit.reconcile",
+        "schedule": 3600.0,
+    },
+    "security.aml_tick": {
+        "task": "security.aml_tick",
+        "schedule": 600.0,
+    },
+    "marketplace.settle_vendors": {
+        "task": "marketplace.settle_vendors",
+        "schedule": crontab(hour=1, minute=0),  # daily at 01:00
+    },
+    "wallet.daily_yield": {
+        "task": "wallet.daily_yield",
+        "schedule": crontab(hour=0, minute=5),  # daily at 00:05
+    },
+}
 
 
 @setup_logging.connect

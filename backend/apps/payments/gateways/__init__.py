@@ -1,2 +1,10 @@
-from .base import BaseGateway, PaymentRequest, PaymentResponse, VerifyResponse, GATEWAYS  # noqa: F401
-from . import zarinpal, idpay, payping  # noqa: F401  ensure registration
+from .base import (  # noqa: F401
+    BaseGateway,
+    GATEWAYS,
+    PaymentRequest,
+    PaymentResponse,
+    VerifyResponse,
+    get,
+    register,
+)
+from . import idpay, payping, zarinpal  # noqa: F401  ensure registration

@@ -91,14 +91,17 @@ class StateMachine:
             instance.status = t.to
 
         # Save the field if the model is Django-backed
-        if hasattr(instance, "save"):
-            field_name = "state" if hasattr(instance, "state") and "state" in {
-                f.name for f in getattr(instance, "_meta").fields  # type: ignore[union-attr]
-            } else "status"
+        meta = getattr(instance, "_meta", None)
+        if hasattr(instance, "save") and meta is not None:
+            field_names = {f.name for f in meta.fields}
+            field_name = "state" if "state" in field_names else "status"
             try:
                 instance.save(update_fields=[field_name, "updated_at"])
             except Exception:  # noqa: BLE001
-                instance.save(update_fields=[field_name])
+                try:
+                    instance.save(update_fields=[field_name])
+                except Exception:  # noqa: BLE001
+                    instance.save()
 
         if t.on_enter:
             t.on_enter(instance)

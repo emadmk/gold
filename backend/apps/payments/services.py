@@ -44,19 +44,26 @@ def request_payment(*, order: Order, gateway: str, callback_url: str, mobile: st
     return attempt
 
 
-@transaction.atomic
 def handle_callback(*, gateway: str, authority: str, idempotency_key: str = "") -> PaymentAttempt:
-    key = idempotency_key or f"{gateway}:{authority}"
-    if IdempotencyKey.objects.filter(scope="payment.callback", key=key).exists():
-        emit_event("payments.webhook.duplicate", severity="warning",
-                   data={"gateway": gateway, "authority": authority})
-        return PaymentAttempt.objects.select_for_update().get(authority=authority, gateway=gateway)
-    IdempotencyKey.objects.create(scope="payment.callback", key=key)
+    """Idempotent payment-callback handler.
 
-    attempt = PaymentAttempt.objects.select_for_update().get(authority=authority, gateway=gateway)
-    order = Order.objects.select_for_update().get(id=attempt.order_id)
-    if attempt.state == "succeeded":
-        return attempt
+    The idempotency row is committed in its own transaction so a downstream
+    verify failure cannot roll it back; the verification + state change then
+    runs in a second atomic block.
+    """
+    key = idempotency_key or f"{gateway}:{authority}"
+    with transaction.atomic():
+        if IdempotencyKey.objects.filter(scope="payment.callback", key=key).exists():
+            emit_event("payments.webhook.duplicate", severity="warning",
+                       data={"gateway": gateway, "authority": authority})
+            return PaymentAttempt.objects.get(authority=authority, gateway=gateway)
+        IdempotencyKey.objects.create(scope="payment.callback", key=key)
+
+    with transaction.atomic():
+        attempt = PaymentAttempt.objects.select_for_update().get(authority=authority, gateway=gateway)
+        order = Order.objects.select_for_update().get(id=attempt.order_id)
+        if attempt.state == "succeeded":
+            return attempt
 
     emit_event("payments.attempt.callback",
                actor={"type": "gateway", "id": gateway},

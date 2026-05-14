@@ -16,89 +16,97 @@ from .models import Order
 PAYMENT_DEADLINE_MIN = 30
 
 
-@transaction.atomic
-def submit_buy_gold(*, user, quote, mg_amount: int) -> Order:
-    """Create + submit a buy-gold order, locking the rial cost."""
+def _submit_trade(*, user, quote, mg_amount: int, asset: str, side: str) -> Order:
+    """Shared logic for gold/silver buy/sell. side ∈ {buy, sell}."""
     if quote.valid_until <= timezone.now():
         raise ValueError("نرخ منقضی شده است؛ مجدداً تأیید کنید.")
     if mg_amount <= 0:
         raise ValueError("مقدار باید بیشتر از صفر باشد.")
+    if quote.asset != asset or quote.side != side:
+        raise ValueError("نرخ با نوع سفارش هم‌خوانی ندارد.")
 
-    cost = mg_amount * quote.price_per_mg_rial
+    rial_value = mg_amount * quote.price_per_mg_rial
+    kind = f"{side}_{asset}"
     order = Order.objects.create(
         user=user,
-        kind="buy_gold",
+        kind=kind,
         state="draft",
         quote=quote,
         price_per_mg_rial=quote.price_per_mg_rial,
         mg_amount=mg_amount,
-        rial_amount=cost,
+        rial_amount=rial_value,
         payment_deadline=timezone.now() + timedelta(minutes=PAYMENT_DEADLINE_MIN),
     )
-    # If the user has enough rial in-wallet, settle synchronously — no gateway hop.
-    rial = user.rial_wallet
-    if rial.available_rial >= cost:
-        order_sm.fire(
-            order, trigger="order.submitted",
-            actor={"type": "user", "id": str(user.id)},
-            target={"type": "order", "id": str(order.id), "owner_id": str(user.id)},
-            data={"asset": "gold", "mg_amount": mg_amount, "rial_amount": cost},
-        )
-        wallet_svc.lock_rial(user, cost)
-        # immediately verify (wallet-funded payment)
+
+    if side == "buy":
+        # Re-fetch — `user.rial_wallet` may be cached on the user.
+        from apps.wallet.models import RialWallet
+
+        rial = RialWallet.objects.get(user=user)
+        if rial.available_rial >= rial_value:
+            order_sm.fire(
+                order, trigger="order.submitted",
+                actor={"type": "user", "id": str(user.id)},
+                target={"type": "order", "id": str(order.id), "owner_id": str(user.id)},
+                data={"asset": asset, "mg_amount": mg_amount, "rial_amount": rial_value},
+            )
+            wallet_svc.lock_rial(user, rial_value)
+            order_sm.fire(order, trigger="payment.verified",
+                          actor={"type": "user", "id": str(user.id)},
+                          target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
+            complete_buy_order(order)
+        else:
+            order_sm.fire(
+                order, trigger="order.submitted",
+                actor={"type": "user", "id": str(user.id)},
+                target={"type": "order", "id": str(order.id), "owner_id": str(user.id)},
+                data={"asset": asset, "mg_amount": mg_amount, "rial_amount": rial_value},
+            )
+    else:  # sell
+        wallet_svc.debit_asset(user, asset, mg_amount, kind=kind, order=order)
+        wallet_svc.credit_rial(user, rial_value, kind="adjustment", order=order,
+                               description=f"فروش {asset} — درآمد ریالی")
+        order_sm.fire(order, trigger="order.submitted",
+                      actor={"type": "user", "id": str(user.id)},
+                      target={"type": "order", "id": str(order.id), "owner_id": str(user.id)},
+                      data={"asset": asset, "mg_amount": -mg_amount, "rial_amount": rial_value})
         order_sm.fire(order, trigger="payment.verified",
                       actor={"type": "user", "id": str(user.id)},
                       target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
-        complete_buy_order(order)
-    else:
-        order_sm.fire(
-            order, trigger="order.submitted",
-            actor={"type": "user", "id": str(user.id)},
-            target={"type": "order", "id": str(order.id), "owner_id": str(user.id)},
-            data={"asset": "gold", "mg_amount": mg_amount, "rial_amount": cost},
-        )
-        # rial-locking is conceptual here — payment provider will close the loop
+        order_sm.fire(order, trigger="order.process",
+                      target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
+        order_sm.fire(order, trigger="order.settle",
+                      target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
     return order
 
 
 @transaction.atomic
-def submit_sell_gold(*, user, quote, mg_amount: int) -> Order:
-    if quote.valid_until <= timezone.now():
-        raise ValueError("نرخ منقضی شده است.")
-    if mg_amount <= 0:
-        raise ValueError("مقدار باید بیشتر از صفر باشد.")
-    revenue = mg_amount * quote.price_per_mg_rial
+def submit_buy_gold(*, user, quote, mg_amount: int) -> Order:
+    return _submit_trade(user=user, quote=quote, mg_amount=mg_amount, asset="gold", side="buy")
 
-    order = Order.objects.create(
-        user=user, kind="sell_gold", state="draft", quote=quote,
-        price_per_mg_rial=quote.price_per_mg_rial,
-        mg_amount=mg_amount, rial_amount=revenue,
-    )
-    # debit gold then credit rial — must succeed atomically
-    wallet_svc.debit_asset(user, "gold", mg_amount, kind="sell_gold", order=order)
-    wallet_svc.credit_rial(user, revenue, kind="adjustment", order=order,
-                           description="فروش طلا — درآمد ریالی")
-    order_sm.fire(order, trigger="order.submitted",
-                  actor={"type": "user", "id": str(user.id)},
-                  target={"type": "order", "id": str(order.id), "owner_id": str(user.id)},
-                  data={"asset": "gold", "mg_amount": -mg_amount, "rial_amount": revenue})
-    order_sm.fire(order, trigger="payment.verified",
-                  actor={"type": "user", "id": str(user.id)},
-                  target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
-    order_sm.fire(order, trigger="order.process",
-                  target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
-    order_sm.fire(order, trigger="order.settle",
-                  target={"type": "order", "id": str(order.id), "owner_id": str(user.id)})
-    return order
+
+@transaction.atomic
+def submit_sell_gold(*, user, quote, mg_amount: int) -> Order:
+    return _submit_trade(user=user, quote=quote, mg_amount=mg_amount, asset="gold", side="sell")
+
+
+@transaction.atomic
+def submit_buy_silver(*, user, quote, mg_amount: int) -> Order:
+    return _submit_trade(user=user, quote=quote, mg_amount=mg_amount, asset="silver", side="buy")
+
+
+@transaction.atomic
+def submit_sell_silver(*, user, quote, mg_amount: int) -> Order:
+    return _submit_trade(user=user, quote=quote, mg_amount=mg_amount, asset="silver", side="sell")
 
 
 def complete_buy_order(order: Order) -> Order:
-    """Move a paid buy_* order to processing then completed; credit asset to wallet."""
+    """Move a paid buy_* / topup order to processing then completed."""
     order_sm.fire(order, trigger="order.process",
                   target={"type": "order", "id": str(order.id), "owner_id": str(order.user_id)})
 
-    if order.kind == "buy_gold":
-        # debit rial, unlock + remove, credit gold
+    if order.kind in ("buy_gold", "buy_silver"):
+        asset = "gold" if order.kind == "buy_gold" else "silver"
         try:
             wallet_svc.unlock_rial(order.user, order.rial_amount)
             wallet_svc.debit_rial(order.user, order.rial_amount, kind="adjustment",
@@ -107,17 +115,8 @@ def complete_buy_order(order: Order) -> Order:
             order_sm.fire(order, trigger="order.fail",
                           target={"type": "order", "id": str(order.id), "owner_id": str(order.user_id)})
             return order
-        wallet_svc.credit_asset(order.user, "gold", order.mg_amount, kind="buy_gold", order=order,
-                                description=f"خرید طلا — سفارش {order.order_number}")
-    elif order.kind == "buy_silver":
-        try:
-            wallet_svc.unlock_rial(order.user, order.rial_amount)
-            wallet_svc.debit_rial(order.user, order.rial_amount, kind="adjustment", order=order)
-        except InsufficientFunds:
-            order_sm.fire(order, trigger="order.fail",
-                          target={"type": "order", "id": str(order.id), "owner_id": str(order.user_id)})
-            return order
-        wallet_svc.credit_asset(order.user, "silver", order.mg_amount, kind="buy_silver", order=order)
+        wallet_svc.credit_asset(order.user, asset, order.mg_amount, kind=order.kind, order=order,
+                                description=f"خرید {asset} — سفارش {order.order_number}")
     elif order.kind == "wallet_topup":
         wallet_svc.credit_rial(order.user, order.rial_amount, kind="deposit", order=order,
                                description=f"شارژ کیف پول — سفارش {order.order_number}")
@@ -126,6 +125,12 @@ def complete_buy_order(order: Order) -> Order:
                   target={"type": "order", "id": str(order.id), "owner_id": str(order.user_id)})
     order.paid_at = timezone.now()
     order.save(update_fields=["paid_at"])
+    # Generate invoice PDF asynchronously
+    try:
+        from .invoices import generate_invoice
+        generate_invoice(order)
+    except Exception:  # noqa: BLE001 — never block settlement
+        pass
     return order
 
 
@@ -137,7 +142,10 @@ def cancel_order(order: Order) -> Order:
                   actor={"type": "user", "id": str(order.user_id)},
                   target={"type": "order", "id": str(order.id), "owner_id": str(order.user_id)})
     if order.kind in ("buy_gold", "buy_silver"):
-        wallet_svc.unlock_rial(order.user, order.rial_amount)
+        try:
+            wallet_svc.unlock_rial(order.user, order.rial_amount)
+        except Exception:  # noqa: BLE001
+            pass
     return order
 
 
