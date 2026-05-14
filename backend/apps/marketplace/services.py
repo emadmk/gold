@@ -40,7 +40,19 @@ def _latest_999_per_g() -> int:
 
 
 def compute_product_price(p: Product) -> int:
-    """Return the rial unit price for this product right now."""
+    """Return the rial unit price for this product right now.
+
+    Implements the formula from `mohem.docx §6`:
+
+        base    = weight × per_g          (in rial)
+        wage    = base × wage_pct
+        margin  = (base + wage) × margin_pct   ← compounded
+        accessory = sum(p.metadata["accessory_prices_rial"])
+        vat     = (wage + margin + accessory) × vat_pct   (jewelry only)
+        final   = base + wage + margin + accessory + vat + fixed_extra_rial
+
+    Silver and coin shortcuts skip the wage/margin/VAT layer.
+    """
     if p.category == "silver":
         per_g = _latest_999_per_g()
         base = int(Decimal(p.weight_mg) * Decimal(per_g) / Decimal(1000))
@@ -50,14 +62,20 @@ def compute_product_price(p: Product) -> int:
         equiv_18k_mg = int(Decimal(p.weight_mg) * Decimal(p.karat) / Decimal(750))
         base = int(Decimal(equiv_18k_mg) * Decimal(per_g) / Decimal(1000))
         return base + int(p.fixed_extra_rial)
-    # melted + jewelry
+    # melted / jewelry / leather_bracelet / ingot — full formula
     per_g = _latest_18k_per_g()
     equiv_18k_mg = int(Decimal(p.weight_mg) * Decimal(p.karat) / Decimal(750))
     base = int(Decimal(equiv_18k_mg) * Decimal(per_g) / Decimal(1000))
-    fee = int(Decimal(base) * Decimal(p.manufacturing_fee_pct))
-    margin = int(Decimal(base) * Decimal(p.vendor_margin_pct))
-    vat = int((Decimal(fee) + Decimal(margin)) * VAT_PCT) if p.category == "jewelry" else 0
-    return base + fee + margin + vat + int(p.fixed_extra_rial)
+    wage = int(Decimal(base) * Decimal(p.manufacturing_fee_pct))
+    margin = int(Decimal(base + wage) * Decimal(p.vendor_margin_pct))
+    accessories = int(sum(
+        Decimal(str(x)) for x in (p.metadata or {}).get("accessory_prices_rial", []) if x
+    ))
+    vat = (
+        int((Decimal(wage) + Decimal(margin) + Decimal(accessories)) * VAT_PCT)
+        if p.category == "jewelry" else 0
+    )
+    return base + wage + margin + accessories + vat + int(p.fixed_extra_rial)
 
 
 def apply_to_vendor(*, user, shop_name: str, shop_slug: str, legal_name: str,

@@ -8,7 +8,8 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-# Re-export the settlement model so Django sees it as part of this app
+# Re-export sub-models so Django sees them as part of this app
+from .cart import Cart, CartItem, DiscountCode, ShippingAddress  # noqa: F401
 from .settlements import VendorSettlement  # noqa: F401
 
 
@@ -53,11 +54,18 @@ class Product(models.Model):
         ("jewelry", _("طلای ساخته‌شده")),
         ("coin", _("سکه")),
         ("silver", _("نقره")),
+        ("ingot", _("شمش طلا")),
+        ("leather_bracelet", _("دستبند چرمی")),
     ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant_id = models.CharField(max_length=40, default="default", db_index=True)
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="products")
-    category = models.CharField(max_length=10, choices=CATEGORIES)
+    category = models.CharField(max_length=20, choices=CATEGORIES)
+    sub_category_code = models.CharField(
+        max_length=40, blank=True, db_index=True,
+        help_text="apps.jewelry.JewelryCategory.code, e.g. 'ring' / 'necklace'",
+    )
+    brand = models.CharField(max_length=80, blank=True, db_index=True)
     title = models.CharField(max_length=200)
     slug = models.SlugField()
     sku = models.CharField(max_length=40, unique=True)
@@ -71,14 +79,34 @@ class Product(models.Model):
     description = models.TextField(blank=True)
     stock = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True)
+    discount_pct = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="0.10 = 10%; applied as a discount on the computed price.",
+    )
+    shipping_cost_rial = models.BigIntegerField(default=0)
+    shipping_methods = models.JSONField(
+        default=list, blank=True,
+        help_text='List of methods, e.g. ["post-pishtaz", "tipax", "snapp-box"].',
+    )
+    # `metadata` may carry: accessory_prices_rial: [int], weight_variants: [int],
+    #                       gallery: [url], video_url: str, …
     metadata = models.JSONField(default=dict, blank=True)
+    views = models.PositiveIntegerField(default=0)
+    sold_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
             models.Index(fields=["vendor", "category", "-created_at"]),
             models.Index(fields=["is_active", "-created_at"]),
+            models.Index(fields=["category", "karat", "weight_mg"]),
+            models.Index(fields=["sub_category_code", "is_active"]),
+            models.Index(fields=["brand"]),
         ]
 
     def __str__(self) -> str:
         return f"{self.sku} — {self.title}"
+
+    @property
+    def is_low_stock(self) -> bool:
+        return self.is_active and 0 < self.stock < 2

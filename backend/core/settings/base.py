@@ -328,6 +328,14 @@ PAYMENT_GATEWAYS = {
         "api_key": env("PAYPING_API_KEY", default=""),
         "sandbox": env.bool("PAYPING_SANDBOX", default=True),
     },
+    "snappay": {
+        "api_key": env("SNAPPAY_API_KEY", default=""),
+        "sandbox": env.bool("SNAPPAY_SANDBOX", default=True),
+    },
+    "gsmpay": {
+        "api_key": env("GSMPAY_API_KEY", default=""),
+        "sandbox": env.bool("GSMPAY_SANDBOX", default=True),
+    },
 }
 
 # ---------------------------------------------------------------------------

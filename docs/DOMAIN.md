@@ -73,19 +73,27 @@ gram_18k_rial = mesghal × 750 / (4.6083 × 705)
 Implemented only if needed in the UI; the platform stores the gram
 price directly.
 
-### 3.4 Marketplace product (jewelry)
+### 3.4 Marketplace product (jewelry / melted / ingot / leather_bracelet)
+
+Implements the formula from `mohem.docx §6`:
 
 ```
-base    = weight_mg × karat / 750 × per_gram_18k / 1000
-fee     = base × manufacturing_fee_pct
-margin  = base × vendor_margin_pct
-vat     = (fee + margin) × 0.09          ← only on jewelry, only on the FEE+MARGIN portion
-final   = base + fee + margin + vat + fixed_extra_rial
+base        = weight_mg × karat / 750 × per_gram_18k / 1000
+wage        = base × manufacturing_fee_pct
+margin      = (base + wage) × vendor_margin_pct           ← COMPOUNDED on (base + wage)
+accessories = sum(product.metadata["accessory_prices_rial"])
+vat         = (wage + margin + accessories) × 0.09       ← jewelry only
+final       = base + wage + margin + accessories + vat + fixed_extra_rial
 ```
 
-* **VAT** (مالیات بر ارزش افزوده) is 9 % applied only to the labour and
-  vendor profit, never to the raw gold value. This matches Iranian
-  retail-jewelry law.
+* **Margin is compounded on (base + wage)** — not on base alone.
+* **Accessories** (stones, leather, etc.) are listed as integer rial
+  values in `Product.metadata["accessory_prices_rial"]: list[int]`.
+* **VAT** (مالیات بر ارزش افزوده) is 9 % applied to
+  *(wage + margin + accessories)*, never to the raw gold value.
+* Test: `backend/tests/test_product_pricing.py::test_formula_matches_docx_example`
+  verifies the docx-quoted worked example (1 g × 20M toman, 14% wage,
+  7% margin → 247,916,400 rial).
 
 ### 3.5 Marketplace product (coin)
 
@@ -233,8 +241,9 @@ partitioned.
 | Bar denominations | 1 g, 2 g, 5 g, 10 g |
 | Minimum withdraw | 100 000 rial (10 000 toman) |
 | Withdraw fee | 20 000 rial (configurable) |
-| Payment deadline | 30 minutes |
-| Quote validity | 30 seconds |
+| Cart price-lock | 6 minutes (per mohem.docx §7) |
+| Payment deadline (after gateway redirect) | 20 minutes (per mohem.docx §8) |
+| Quote validity | 6 minutes (matches cart lock) |
 | OTP TTL | 120 seconds |
 | Max OTP attempts | 5 / window |
 | Daily yield | 24 % APR / 365 (default) |

@@ -7,4 +7,4 @@ from .base import (  # noqa: F401
     get,
     register,
 )
-from . import idpay, payping, zarinpal  # noqa: F401  ensure registration
+from . import gsmpay, idpay, payping, snappay, zarinpal  # noqa: F401  ensure registration

@@ -116,6 +116,12 @@ _r("marketplace.vendor.suspended", "domain", default_severity="warning")
 _r("marketplace.product.published", "domain")
 _r("marketplace.product.delisted", "domain")
 _r("marketplace.settlement.run", "domain")
+_r("marketplace.cart.item_added", "domain", default_severity="debug")
+_r("marketplace.cart.item_removed", "domain", default_severity="debug")
+_r("marketplace.cart.price_changed", "domain")
+_r("marketplace.cart.discount_applied", "domain")
+_r("marketplace.cart.relocked", "domain", default_severity="debug")
+_r("marketplace.shipping.address_added", "domain", default_severity="debug")
 
 # Security / system ----------------------------------------------------------
 _r("security.login.brute_force", "security", default_severity="warning")

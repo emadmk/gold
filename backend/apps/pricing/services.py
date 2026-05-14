@@ -11,7 +11,7 @@ from .formulas import gold_buy_per_mg, gold_sell_per_mg, silver_buy_per_mg, silv
 from .models import PriceQuote, PriceTick
 
 
-QUOTE_VALIDITY_SECONDS = 30
+QUOTE_VALIDITY_SECONDS = 6 * 60   # 6 minutes — cart price lock
 
 
 def latest_tick(source_key: str) -> PriceTick:

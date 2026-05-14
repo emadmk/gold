@@ -51,15 +51,17 @@ COIN_CATALOGUE = [
 # Standard jewelry taxonomy (Persian retail conventions).
 # (code, title_fa, sort)
 JEWELRY_CATEGORIES = [
-    ("ring", "انگشتر", 10),
-    ("necklace", "گردنبند", 20),
-    ("bracelet", "دستبند", 30),
+    ("ring", "انگشتر و حلقه طلا", 10),
+    ("necklace", "گردنبند طلا", 20),
+    ("bracelet", "دستبند طلا", 30),
+    ("leather_bracelet", "دستبند چرمی", 35),
     ("bangle", "النگو", 40),
-    ("earring", "گوشواره", 50),
-    ("set", "سرویس / نیم‌ست", 60),
-    ("pendant", "آویز", 70),
+    ("earring", "گوشواره طلا", 50),
+    ("set", "نیم ست / سرویس طلا", 60),
+    ("pendant", "پلاک / آویز طلا", 70),
     ("anklet", "پابند", 80),
     ("watch", "ساعت", 90),
+    ("ingot", "شمش طلا", 100),
 ]
 
 # Blog categories.

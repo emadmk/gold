@@ -13,7 +13,7 @@ from apps.wallet.services import InsufficientFunds
 from .models import Order
 
 
-PAYMENT_DEADLINE_MIN = 30
+PAYMENT_DEADLINE_MIN = 20  # once on the gateway, 20 minutes to complete
 
 
 def _submit_trade(*, user, quote, mg_amount: int, asset: str, side: str) -> Order:
