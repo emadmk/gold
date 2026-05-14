@@ -7,7 +7,7 @@ from datetime import timedelta
 import httpx
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from django.conf import settings
+from django.conf import settings  # noqa: F401  (used by _send_via_kavenegar)
 from django.utils import timezone
 
 from apps.audit.emit import emit_event
@@ -25,7 +25,13 @@ def _generate_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def request_otp(phone: str, purpose: str = "login") -> str:
+def request_otp(phone: str, purpose: str = "login") -> None:
+    """Generate, persist (hashed), and SMS-deliver a 6-digit OTP.
+
+    The plaintext code is sent only over SMS via Kavenegar; it is NOT
+    returned to the caller. The hashed copy lives in `OTPCode` for
+    verification.
+    """
     code = _generate_code()
     OTPCode.objects.create(
         phone=phone,
@@ -39,7 +45,6 @@ def request_otp(phone: str, purpose: str = "login") -> str:
         target={"type": "phone", "id": hash_sha256(phone)[:16]},
         data={"purpose": purpose},
     )
-    return code if settings.SERVICE_ENV != "prod" else ""
 
 
 def verify_otp(phone: str, code: str, purpose: str = "login") -> bool:

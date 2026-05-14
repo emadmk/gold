@@ -1,6 +1,24 @@
-"""Seed local development data."""
+"""
+Seed production-ready reference data.
+
+What this command writes is ONLY reference data that is part of the
+domain itself — not fake demo content. Specifically:
+
+* the bootstrap super-admin (with a generated random password the first
+  time, printed to stdout so the operator can save it)
+* the pricing-formula coefficients (so the admin panel can edit them)
+* the coin catalogue (Iran's standard sekke types with real weights)
+* the live price snapshot fetched **from TGJU** — no hard-coded numbers.
+
+There are **no** fake vendors, no fake products, no fake users. Real
+vendors apply through `/vendor/apply`; real products are entered via the
+vendor panel; KYC files are uploaded by real users.
+"""
 from __future__ import annotations
 
+import asyncio
+import os
+import secrets
 from decimal import Decimal
 
 from django.conf import settings
@@ -9,95 +27,116 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.coins.models import CoinType
-from apps.marketplace.models import Product, Vendor
-from apps.pricing.models import PriceTick, PricingFormula
+from apps.pricing.crawler import fetch_with_fallback
+from apps.pricing.models import SOURCE_KEYS, PriceTick, PricingFormula
 from apps.wallet.services import ensure_wallets
 
 
-class Command(BaseCommand):
-    help = "Seed local dev data (super-admin, formulas, a few vendors, products, ticks)."
+# Real coin catalogue (Iran national mint specifications).
+COIN_CATALOGUE = [
+    ("emami", "سکه امامی", 8133, 7320),       # 8.1333g, 22k → 7.32g pure gold
+    ("bahar", "سکه بهار آزادی", 8133, 7320),
+    ("half", "نیم سکه", 4067, 3660),
+    ("quarter", "ربع سکه", 2034, 1830),
+    ("gerami", "سکه گرمی", 1016, 915),
+]
 
-    def handle(self, *_args: object, **_kwargs: object) -> None:
-        admin, _ = User.objects.get_or_create(
-            phone="09120000000",
+
+class Command(BaseCommand):
+    help = (
+        "Seed reference data only: super-admin, pricing formulas, coin "
+        "catalogue, real live prices from TGJU. No mock data."
+    )
+
+    def add_arguments(self, parser) -> None:  # type: ignore[no-untyped-def]
+        parser.add_argument(
+            "--admin-phone",
+            default=os.environ.get("BOOTSTRAP_ADMIN_PHONE", "09120000000"),
+            help="phone for the bootstrap super-admin",
+        )
+        parser.add_argument(
+            "--skip-prices",
+            action="store_true",
+            help="skip the live-price fetch (offline bootstrap)",
+        )
+
+    def handle(self, *_args: object, **options: object) -> None:
+        self._seed_admin(options["admin_phone"])  # type: ignore[arg-type]
+        self._seed_formulas()
+        self._seed_coins()
+        if not options["skip_prices"]:
+            self._seed_prices()
+        self.stdout.write(self.style.SUCCESS("Seed complete."))
+
+    # ---- admin ----
+    def _seed_admin(self, phone: str) -> None:
+        admin, created = User.objects.get_or_create(
+            phone=phone,
             defaults={
-                "is_staff": True, "is_superuser": True,
-                "is_verified": True, "is_phone_verified": True,
-                "first_name": "ادمین", "last_name": "کلید",
+                "is_staff": True,
+                "is_superuser": True,
+                "is_verified": True,
+                "is_phone_verified": True,
             },
         )
-        if not admin.has_usable_password():
-            admin.set_password("changeme-please")
-            admin.save()
         ensure_wallets(admin)
-        self.stdout.write(self.style.SUCCESS(f"admin: phone={admin.phone} password=changeme-please"))
-
-        # Formulas — seed defaults from settings.DOMAIN_DEFAULTS
-        for k, v in settings.DOMAIN_DEFAULTS.items():
-            PricingFormula.objects.get_or_create(
-                key=k, defaults={"value": Decimal(v), "description": f"default {k}"}
+        if created or not admin.has_usable_password():
+            password = secrets.token_urlsafe(16)
+            admin.set_password(password)
+            admin.save()
+            self.stdout.write(self.style.SUCCESS(
+                f"Bootstrap super-admin created:\n"
+                f"  phone:    {phone}\n"
+                f"  password: {password}\n"
+                f"Save this NOW — it will not be shown again."
+            ))
+        else:
+            self.stdout.write(
+                f"Super-admin {phone} already exists; password unchanged."
             )
-        self.stdout.write(self.style.SUCCESS(f"formulas seeded: {len(settings.DOMAIN_DEFAULTS)}"))
 
-        # Coins
-        coins_data = [
-            ("emami", "سکه امامی", 8133, 7320),
-            ("bahar", "سکه بهار آزادی", 8133, 7320),
-            ("half", "نیم سکه", 4067, 3660),
-            ("quarter", "ربع سکه", 2034, 1830),
-            ("gerami", "سکه گرمی", 1016, 915),
-        ]
-        for code, title, weight_mg, gold_mg in coins_data:
+    # ---- pricing formulas ----
+    def _seed_formulas(self) -> None:
+        for key, default in settings.DOMAIN_DEFAULTS.items():
+            PricingFormula.objects.get_or_create(
+                key=key,
+                defaults={"value": Decimal(default), "description": f"default {key}"},
+            )
+        self.stdout.write(
+            f"Pricing formulas: {PricingFormula.objects.count()} rows."
+        )
+
+    # ---- coin catalogue ----
+    def _seed_coins(self) -> None:
+        for code, title, weight_mg, gold_mg in COIN_CATALOGUE:
             CoinType.objects.get_or_create(
                 code=code,
                 defaults={"title_fa": title, "weight_mg": weight_mg, "gold_content_mg": gold_mg},
             )
+        self.stdout.write(f"Coin catalogue: {CoinType.objects.count()} rows.")
 
-        # Vendors
-        for i in range(1, 4):
-            v_user, _ = User.objects.get_or_create(
-                phone=f"0912100000{i}",
-                defaults={"is_phone_verified": True, "is_verified": True, "is_vendor": True},
+    # ---- live prices ----
+    def _seed_prices(self) -> None:
+        """Fetch every source from TGJU (with brsapi fallback) and store ticks."""
+        loop = asyncio.new_event_loop()
+        try:
+            inserted = 0
+            for key in SOURCE_KEYS:
+                try:
+                    price, source = loop.run_until_complete(fetch_with_fallback(key))
+                    PriceTick.objects.create(
+                        source_key=key,
+                        rial_price=int(price),
+                        captured_at=timezone.now(),
+                        source=source,
+                    )
+                    inserted += 1
+                except Exception as exc:  # noqa: BLE001
+                    self.stderr.write(self.style.WARNING(
+                        f"  ! could not seed {key}: {exc!r}"
+                    ))
+            self.stdout.write(
+                f"Live prices: {inserted}/{len(SOURCE_KEYS)} source(s) captured."
             )
-            ensure_wallets(v_user)
-            Vendor.objects.get_or_create(
-                user=v_user,
-                defaults={
-                    "shop_name": f"طلا فروشی نمونه {i}",
-                    "shop_slug": f"sample-shop-{i}",
-                    "legal_name": f"شرکت نمونه {i}",
-                    "iban": f"IR{i:024d}",
-                    "state": "approved",
-                    "city": "تهران",
-                },
-            )
-
-        # Products
-        for v in Vendor.objects.filter(state="approved"):
-            Product.objects.get_or_create(
-                sku=f"ABS-{v.id.hex[:6]}",
-                defaults={
-                    "vendor": v,
-                    "category": "melted",
-                    "title": f"طلای آب‌شده ۱۸ — {v.shop_name}",
-                    "slug": f"melted-{v.id.hex[:6]}",
-                    "weight_mg": 5000,
-                    "karat": 750,
-                    "manufacturing_fee_pct": Decimal("0"),
-                    "vendor_margin_pct": Decimal("0.01"),
-                },
-            )
-
-        # A few ticks so /api/v1/prices returns data even before crawler runs
-        for key, rial in [
-            ("gold_18k_750", 17_241_600 * 100),
-            ("silver_999", 396_000 * 100),
-            ("coin_emami", 480_000_000 * 100),
-            ("usd_free", 870_000 * 100),
-        ]:
-            PriceTick.objects.get_or_create(
-                source_key=key, captured_at=timezone.now(),
-                defaults={"rial_price": rial, "source": "seed"},
-            )
-
-        self.stdout.write(self.style.SUCCESS("Seed complete."))
+        finally:
+            loop.close()
