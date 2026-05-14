@@ -1,0 +1,98 @@
+# ---- Python / Django ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual envs
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+ENV/
+
+# Django
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+backend/.coverage
+backend/htmlcov/
+backend/.pytest_cache/
+
+# Migrations are kept in repo (do NOT ignore)
+!backend/apps/*/migrations/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+.turbo/
+.pnpm-store/
+*.tsbuildinfo
+.next-env.d.ts
+
+# ---- Editors ----
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- Docker / Ops ----
+docker/data/
+docker/volumes/
+postgres-data/
+redis-data/
+minio-data/
+elasticsearch-data/
+kibana-data/
+
+# ---- Secrets / Keys ----
+*.pem
+*.key
+*.crt
+secrets/
+.secrets/
+
+# ---- Logs ----
+logs/
+*.log
+celerybeat-schedule
+celerybeat.pid
+
+# ---- Coverage ----
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+
+# ---- OS ----
+*.bak
+*.tmp
+
+# ---- Misc ----
+.mypy_cache/
+.ruff_cache/
+.cache/
