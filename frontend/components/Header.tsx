@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { PriceTicker } from "./PriceTicker";
 
@@ -13,11 +17,19 @@ const NAV: Array<{ label: string; href: string }> = [
 ];
 
 export function Header() {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const query = q.trim();
+    router.push(query ? `/marketplace?q=${encodeURIComponent(query)}` : "/marketplace");
+  }
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[var(--color-border)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <PriceTicker />
 
-      {/* Top row: logo · search · auth/cart */}
       <div className="container mx-auto flex items-center gap-4 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden>
@@ -39,12 +51,7 @@ export function Header() {
           </span>
         </Link>
 
-        {/* Search */}
-        <form
-          action="/marketplace"
-          method="GET"
-          className="flex-1 max-w-2xl hidden md:block"
-        >
+        <form onSubmit={submitSearch} className="flex-1 max-w-2xl hidden md:block">
           <label className="relative block">
             <span className="absolute inset-y-0 right-3 flex items-center text-[var(--color-text-muted)]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -53,8 +60,9 @@ export function Header() {
               </svg>
             </span>
             <input
-              name="q"
               type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
               placeholder="جست‌وجو در محصولات طلا و جواهر…"
               className="w-full rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] pr-10 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             />
@@ -83,7 +91,6 @@ export function Header() {
         </div>
       </div>
 
-      {/* Bottom row: nav links */}
       <nav className="border-t border-[var(--color-border)] bg-white">
         <div className="container mx-auto px-4 flex items-center gap-1 overflow-x-auto no-scrollbar text-sm">
           {NAV.map((n) => (
