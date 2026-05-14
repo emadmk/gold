@@ -10,7 +10,9 @@ from .views import (
     VendorDetailView,
     VendorListView,
     VendorMeView,
+    VendorOrdersView,
     VendorProductsView,
+    VendorSettlementsView,
 )
 
 urlpatterns = [
@@ -22,6 +24,8 @@ urlpatterns = [
     path("vendor/apply", VendorApplyView.as_view()),
     path("vendor/me", VendorMeView.as_view()),
     path("vendor/products", VendorProductsView.as_view()),
+    path("vendor/orders", VendorOrdersView.as_view()),
+    path("vendor/settlements", VendorSettlementsView.as_view()),
     path("admin/vendors/<uuid:vendor_id>/approve", VendorAdminApproveView.as_view()),
     path("admin/vendors/<uuid:vendor_id>/suspend", VendorAdminSuspendView.as_view()),
 ]

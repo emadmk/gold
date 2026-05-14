@@ -146,3 +146,68 @@ class AdminAuditLogView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
     queryset = AuditEntry.objects.all().order_by("-created_at")
     serializer_class = _AuditSerializer
+
+
+# ---------------------------------------------------------------------------
+# Payments + delivery admin
+# ---------------------------------------------------------------------------
+
+class _PaymentAttemptSerializer(drf_s.ModelSerializer):
+    class Meta:
+        from apps.payments.models import PaymentAttempt
+
+        model = PaymentAttempt
+        fields = "__all__"
+
+
+class AdminPaymentsView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    serializer_class = _PaymentAttemptSerializer
+
+    def get_queryset(self):
+        from apps.payments.models import PaymentAttempt
+        return PaymentAttempt.objects.all().order_by("-created_at")
+
+
+class _DeliveryAdminSerializer(drf_s.ModelSerializer):
+    class Meta:
+        from apps.delivery.models import DeliveryRequest
+
+        model = DeliveryRequest
+        fields = "__all__"
+
+
+class AdminDeliveryView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    serializer_class = _DeliveryAdminSerializer
+
+    def get_queryset(self):
+        from apps.delivery.models import DeliveryRequest
+        return DeliveryRequest.objects.exclude(state="delivered").order_by("-created_at")
+
+
+class AdminDeliveryActionView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def post(self, request, delivery_id: str, action: str):
+        from apps.audit.state_machine import IllegalTransition
+        from apps.delivery.models import DeliveryRequest
+        from apps.delivery.services import transition
+
+        trigger_map = {
+            "approve": "delivery.approve", "mint": "delivery.mint",
+            "ship": "delivery.ship", "deliver": "delivery.deliver",
+            "cancel": "delivery.cancel",
+        }
+        trigger = trigger_map.get(action)
+        if not trigger:
+            return Response({"detail": "اقدام نامعتبر"}, status=400)
+        try:
+            d = DeliveryRequest.objects.get(id=delivery_id)
+            if "tracking_code" in request.data:
+                d.tracking_code = request.data["tracking_code"]
+                d.save(update_fields=["tracking_code"])
+            transition(d, trigger, actor=request.user)
+        except IllegalTransition as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(_DeliveryAdminSerializer(d).data)

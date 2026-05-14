@@ -12,11 +12,12 @@ export function Header() {
             KeyhanGold<span className="text-[var(--color-gold)]">.</span>
           </span>
         </Link>
-        <nav className="flex items-center gap-6 text-sm">
+        <nav className="hidden md:flex items-center gap-6 text-sm">
           <Link href="/trade/buy">خرید طلا</Link>
           <Link href="/trade/sell">فروش طلا</Link>
           <Link href="/marketplace">مارکت‌پلیس</Link>
           <Link href="/prices">قیمت لحظه‌ای</Link>
+          <Link href="/blog">وبلاگ</Link>
           <Link href="/about">درباره ما</Link>
         </nav>
         <div className="flex items-center gap-3">

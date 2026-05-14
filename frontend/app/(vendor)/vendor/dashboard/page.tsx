@@ -42,7 +42,7 @@ export default async function VendorDashboardPage() {
                 </p>
               </CardBody>
             </Card>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Link href="/vendor/products">
                 <Card className="hover:shadow-[var(--shadow-card-hover)] transition">
                   <CardBody className="text-center">محصولات</CardBody>
@@ -56,6 +56,11 @@ export default async function VendorDashboardPage() {
               <Link href="/vendor/settlements">
                 <Card className="hover:shadow-[var(--shadow-card-hover)] transition">
                   <CardBody className="text-center">تسویه‌ها</CardBody>
+                </Card>
+              </Link>
+              <Link href="/vendor/profile">
+                <Card className="hover:shadow-[var(--shadow-card-hover)] transition">
+                  <CardBody className="text-center">پروفایل</CardBody>
                 </Card>
               </Link>
             </div>

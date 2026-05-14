@@ -1,0 +1,5 @@
+Contact: mailto:security@keyhan.gold
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: fa, en
+Canonical: https://keyhan.gold/.well-known/security.txt
+Policy: https://keyhan.gold/.well-known/disclosure-policy

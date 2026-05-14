@@ -131,18 +131,42 @@ class KYCView(APIView):
         return Response(KYCSubmissionSerializer(sub).data)
 
     def post(self, request):
-        files = {
-            k: request.FILES.get(k)
+        from django.core.exceptions import ValidationError
+
+        from apps.security.uploads import (
+            DEFAULT_DOC_MIMES,
+            DEFAULT_VIDEO_MIMES,
+            reencode_image,
+            validate_upload,
+        )
+
+        files: dict[str, object] = {}
+        try:
             for k in (
-                "national_card_front",
-                "national_card_back",
-                "selfie_with_card",
-                "birth_certificate",
-                "video_attestation",
-            )
-        }
+                "national_card_front", "national_card_back",
+                "selfie_with_card", "birth_certificate",
+            ):
+                f = request.FILES.get(k)
+                if not f:
+                    continue
+                validate_upload(f, allowed_mimes=DEFAULT_DOC_MIMES)
+                files[k] = (
+                    reencode_image(f)
+                    if f.content_type and f.content_type.startswith("image/")
+                    else f
+                )
+            video = request.FILES.get("video_attestation")
+            if video:
+                validate_upload(video, allowed_mimes=DEFAULT_VIDEO_MIMES,
+                                max_bytes=50 * 1024 * 1024)
+                files["video_attestation"] = video
+        except ValidationError as exc:
+            return Response({"detail": exc.messages[0]},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         sub = kyc_svc.submit_kyc(request.user, **files)
-        return Response(KYCSubmissionSerializer(sub).data, status=status.HTTP_201_CREATED)
+        return Response(KYCSubmissionSerializer(sub).data,
+                        status=status.HTTP_201_CREATED)
 
 
 class KYCAdminApproveView(APIView):

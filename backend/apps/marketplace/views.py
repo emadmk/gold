@@ -52,9 +52,19 @@ class VendorDetailView(generics.RetrieveAPIView):
 
 
 class VendorApplyView(APIView):
+    """Vendor onboarding — multipart upload of mandatory licenses."""
+
     permission_classes = [IsAuthenticated, IsKYCVerified]
+    parser_classes = [
+        __import__("rest_framework.parsers", fromlist=["MultiPartParser"]).MultiPartParser,
+        __import__("rest_framework.parsers", fromlist=["FormParser"]).FormParser,
+    ]
 
     def post(self, request):
+        from django.core.exceptions import ValidationError
+
+        from apps.security.uploads import DEFAULT_DOC_MIMES, validate_upload
+
         try:
             v = apply_to_vendor(
                 user=request.user,
@@ -65,6 +75,14 @@ class VendorApplyView(APIView):
                 city=request.data.get("city", ""),
                 description=request.data.get("description", ""),
             )
+            for field in ("business_license", "union_license", "logo"):
+                f = request.FILES.get(field)
+                if f:
+                    validate_upload(f, allowed_mimes=DEFAULT_DOC_MIMES)
+                    setattr(v, field, f)
+            v.save()
+        except ValidationError as exc:
+            return Response({"detail": exc.messages[0]}, status=400)
         except Exception as exc:  # noqa: BLE001
             return Response({"detail": str(exc)}, status=400)
         return Response(VendorSerializer(v).data, status=status.HTTP_201_CREATED)
@@ -76,6 +94,50 @@ class VendorMeView(APIView):
     def get(self, request):
         v = request.user.vendor_profile
         return Response(VendorSerializer(v).data)
+
+    def patch(self, request):
+        v = request.user.vendor_profile
+        for f in ("shop_name", "description", "city", "address", "phone", "iban"):
+            if f in request.data:
+                setattr(v, f, request.data[f])
+        v.save()
+        return Response(VendorSerializer(v).data)
+
+
+class VendorOrdersView(generics.ListAPIView):
+    """Orders received by the logged-in vendor."""
+
+    permission_classes = [IsAuthenticated, IsVendor]
+
+    def get_serializer_class(self):
+        from apps.orders.serializers import OrderSerializer
+        return OrderSerializer
+
+    def get_queryset(self):
+        from apps.orders.models import Order
+        return Order.objects.filter(vendor=self.request.user.vendor_profile).order_by("-created_at")
+
+
+class VendorSettlementsView(generics.ListAPIView):
+    """Settlements paid to the logged-in vendor."""
+
+    permission_classes = [IsAuthenticated, IsVendor]
+
+    def get_serializer_class(self):
+        from rest_framework import serializers as drf_s
+
+        from .settlements import VendorSettlement
+
+        class _Ser(drf_s.ModelSerializer):
+            class Meta:
+                model = VendorSettlement
+                fields = "__all__"
+
+        return _Ser
+
+    def get_queryset(self):
+        from .settlements import VendorSettlement
+        return VendorSettlement.objects.filter(vendor=self.request.user.vendor_profile).order_by("-period_end")
 
 
 class VendorAdminApproveView(APIView):

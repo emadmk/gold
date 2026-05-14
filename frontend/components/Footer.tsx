@@ -15,6 +15,7 @@ export function Footer() {
             <li><Link href="/trade/sell">فروش طلا</Link></li>
             <li><Link href="/delivery">تحویل فیزیکی</Link></li>
             <li><Link href="/marketplace">مارکت‌پلیس</Link></li>
+            <li><Link href="/blog">وبلاگ</Link></li>
           </ul>
         </div>
         <div>

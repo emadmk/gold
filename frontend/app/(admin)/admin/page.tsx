@@ -55,6 +55,8 @@ export default async function AdminHomePage() {
             ["کاربران", "/admin/users"],
             ["فروشندگان", "/admin/vendors"],
             ["سفارش‌ها", "/admin/orders"],
+            ["پرداخت‌ها", "/admin/payments"],
+            ["تحویل‌ها", "/admin/delivery"],
             ["فرمول‌ها", "/admin/formulas"],
             ["تسویه‌ها", "/admin/settlements"],
             ["لاگ", "/admin/audit"],
