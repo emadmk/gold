@@ -1,176 +1,303 @@
 "use client";
 
+/* /status — Bare-metal diagnostic page.
+ *
+ * Uses NO custom hooks, NO custom UI components. Just useState +
+ * useEffect + plain HTML so we can be sure ANY failure here is a
+ * fundamental React-hydration or network problem.
+ */
 import { useEffect, useState } from "react";
 
-import { Footer } from "@/components/Footer";
-import { Header } from "@/components/Header";
-import { Badge } from "@/components/ui/Badge";
-import { Card, CardBody, CardHeader } from "@/components/ui/Card";
-import { useMe } from "@/hooks/useMe";
-
-type Check = {
-  ok: boolean | "pending";
-  label: string;
-  detail?: string;
+type Probe = {
+  url: string;
+  status: number | "pending" | "error";
+  body?: string;
+  ms?: number;
 };
 
-async function probe(path: string): Promise<Check> {
+const ENDPOINTS = [
+  "/health/",
+  "/api/v1/me",
+  "/api/v1/prices",
+  "/api/v1/marketplace/products",
+  "/api/v1/marketplace/facets",
+  "/api/v1/blog/posts",
+];
+
+async function timedFetch(url: string, ms = 5000): Promise<Probe> {
+  const t0 = performance.now();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
   try {
-    const r = await fetch(path, { credentials: "include" });
+    const r = await fetch(url, {
+      credentials: "include",
+      signal: ctl.signal,
+      headers: { Accept: "application/json" },
+    });
+    clearTimeout(timer);
+    let body = "";
+    try {
+      body = (await r.text()).slice(0, 200);
+    } catch {
+      /* ignore */
+    }
     return {
-      ok: r.ok,
-      label: path,
-      detail: `HTTP ${r.status}`,
+      url,
+      status: r.status,
+      body,
+      ms: Math.round(performance.now() - t0),
     };
   } catch (e) {
-    return { ok: false, label: path, detail: (e as Error).message };
+    clearTimeout(timer);
+    return {
+      url,
+      status: "error",
+      body: (e as Error).message,
+      ms: Math.round(performance.now() - t0),
+    };
   }
 }
 
 export default function StatusPage() {
-  const me = useMe();
-  const [checks, setChecks] = useState<Check[]>([
-    { ok: "pending", label: "/api/v1/health/" },
-    { ok: "pending", label: "/api/v1/prices" },
-    { ok: "pending", label: "/api/v1/marketplace/products" },
-    { ok: "pending", label: "/api/v1/marketplace/facets" },
-    { ok: "pending", label: "/api/v1/blog/posts" },
-  ]);
-  const [snapshot, setSnapshot] = useState<Record<string, number>>({});
+  const [probes, setProbes] = useState<Probe[]>(
+    ENDPOINTS.map((u) => ({ url: u, status: "pending" })),
+  );
+  const [hydrated, setHydrated] = useState(false);
+  const [now, setNow] = useState("—");
 
   useEffect(() => {
+    // Mark hydration explicitly so we can SEE when React picks up.
+    setHydrated(true);
+    setNow(new Date().toLocaleString("fa-IR"));
+
+    if (typeof console !== "undefined") {
+      console.log("[/status] hydrated, starting probes");
+    }
+
     let cancelled = false;
-    Promise.all([
-      probe("/health/"),
-      probe("/api/v1/prices"),
-      probe("/api/v1/marketplace/products"),
-      probe("/api/v1/marketplace/facets"),
-      probe("/api/v1/blog/posts"),
-    ]).then((rs) => {
-      if (!cancelled) setChecks(rs);
+    ENDPOINTS.forEach(async (url) => {
+      const p = await timedFetch(url);
+      if (cancelled) return;
+      if (typeof console !== "undefined") {
+        console.log(`[/status] ${url} → ${p.status} (${p.ms}ms)`);
+      }
+      setProbes((prev) =>
+        prev.map((pp) => (pp.url === url ? p : pp)),
+      );
     });
-    fetch("/api/v1/prices", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled && j?.data) setSnapshot(j.data);
-      })
-      .catch(() => null);
     return () => {
       cancelled = true;
     };
   }, []);
 
   return (
-    <>
-      <Header />
-      <main className="container mx-auto px-4 py-10 max-w-3xl space-y-4">
-        <h1 className="text-2xl font-bold">وضعیت سامانه</h1>
-        <p className="text-xs text-[var(--color-text-muted)]">
-          این صفحه برای رفع اشکال طراحی شده — هر زمان چیزی کار نکند، اینجا
-          سریع‌ترین راه فهمیدن این است که کدام لایه خراب است.
+    <main
+      style={{
+        fontFamily:
+          'Vazirmatn, Tahoma, "Segoe UI", system-ui, sans-serif',
+        background: "#F7F8FA",
+        minHeight: "100vh",
+        padding: "24px",
+      }}
+      dir="rtl"
+    >
+      <div style={{ maxWidth: 800, margin: "0 auto" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: "8px 0" }}>
+          وضعیت سامانه
+        </h1>
+        <p style={{ fontSize: 12, color: "#6B7280" }}>
+          صفحه‌ی رفع اشکال. اگر این صفحه برایتان درست رندر می‌شود ولی پنل
+          ادمین/خرید کار نمی‌کند، مشکل از <b>بک‌اند</b> یا <b>کوکی</b> است،
+          نه از React.
         </p>
 
-        <Card>
-          <CardHeader>
-            <h2 className="font-bold">احراز هویت شما</h2>
-          </CardHeader>
-          <CardBody className="text-sm space-y-1">
-            {me.status === "loading" && <p>در حال بررسی…</p>}
-            {me.status === "anonymous" && (
-              <Badge tone="warning">واردنشده — برای دسترسی به امکانات وارد شوید</Badge>
-            )}
-            {me.status === "authenticated" && (
-              <>
-                <p>
-                  <Badge tone="success">واردشده</Badge> &nbsp;
-                  <span dir="ltr">{me.user.phone}</span>
-                </p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {me.user.is_verified ? <Badge tone="success">KYC</Badge> : <Badge tone="warning">بدون KYC</Badge>}
-                  {me.user.is_vendor && <Badge tone="primary">فروشنده</Badge>}
-                  {me.user.is_staff && <Badge tone="gold">staff</Badge>}
-                  {me.user.is_superuser && <Badge tone="gold">superuser</Badge>}
-                  {me.user.is_frozen && <Badge tone="danger">مسدود</Badge>}
-                </div>
-              </>
-            )}
-          </CardBody>
-        </Card>
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: 16,
+            marginTop: 16,
+            border: "1px solid #E5E7EB",
+          }}
+        >
+          <h2 style={{ fontWeight: 700, marginBottom: 8 }}>JavaScript</h2>
+          <p style={{ fontSize: 14 }}>
+            React hydration:{" "}
+            <span
+              style={{
+                background: hydrated ? "#DCFCE7" : "#FEE2E2",
+                color: hydrated ? "#16A34A" : "#DC2626",
+                padding: "2px 8px",
+                borderRadius: 4,
+                fontWeight: 700,
+              }}
+            >
+              {hydrated ? "✓ OK" : "✗ FAIL"}
+            </span>
+          </p>
+          {!hydrated && (
+            <p style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>
+              اگر این متن قرمز را می‌بینید، یعنی فایل‌های JS بارگذاری نشده‌اند
+              یا قبل از اجرا خطا داده‌اند. Ctrl+Shift+R بزنید و در DevTools
+              تب Network و Console را چک کنید.
+            </p>
+          )}
+          <p style={{ fontSize: 12, color: "#6B7280", marginTop: 8 }}>
+            بارگذاری در: <span dir="ltr">{now}</span>
+          </p>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <h2 className="font-bold">دسترسی به API</h2>
-          </CardHeader>
-          <CardBody className="space-y-2 text-sm">
-            {checks.map((c) => (
-              <div key={c.label} className="flex justify-between items-center">
-                <code dir="ltr" className="text-xs">{c.label}</code>
-                {c.ok === "pending" ? (
-                  <Badge tone="neutral">…</Badge>
-                ) : c.ok ? (
-                  <Badge tone="success">{c.detail}</Badge>
-                ) : (
-                  <Badge tone="danger">{c.detail}</Badge>
-                )}
-              </div>
-            ))}
-          </CardBody>
-        </Card>
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: 16,
+            marginTop: 16,
+            border: "1px solid #E5E7EB",
+          }}
+        >
+          <h2 style={{ fontWeight: 700, marginBottom: 8 }}>API probes</h2>
+          <table
+            style={{
+              width: "100%",
+              fontSize: 13,
+              borderCollapse: "collapse",
+            }}
+          >
+            <thead>
+              <tr style={{ background: "#F7F8FA" }}>
+                <th style={th}>endpoint</th>
+                <th style={th}>وضعیت</th>
+                <th style={th}>زمان</th>
+              </tr>
+            </thead>
+            <tbody>
+              {probes.map((p) => (
+                <tr key={p.url}>
+                  <td style={{ ...td, fontFamily: "monospace" }} dir="ltr">
+                    {p.url}
+                  </td>
+                  <td style={td}>
+                    <StatusBadge status={p.status} />
+                  </td>
+                  <td style={td}>
+                    {p.ms !== undefined ? `${p.ms}ms` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <h2 className="font-bold">آخرین قیمت‌ها</h2>
-          </CardHeader>
-          <CardBody className="text-sm">
-            {Object.keys(snapshot).length === 0 ? (
-              <p className="text-[var(--color-text-muted)]">
-                هنوز قیمتی در کش نیست. در محیط dev اگر کرالر اجرا نشده باشد، با
-                دستور <code dir="ltr">make seed</code> یا{" "}
-                <code dir="ltr">python manage.py shell -c &quot;from apps.pricing.tasks import crawl_all; print(crawl_all())&quot;</code>{" "}
-                یک snapshot بسازید.
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {Object.entries(snapshot).map(([k, v]) => (
-                  <li key={k} className="flex justify-between">
-                    <code dir="ltr" className="text-xs">{k}</code>
-                    <span dir="ltr">{Math.floor(v / 10).toLocaleString("fa-IR")} تومان</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: 16,
+            marginTop: 16,
+            border: "1px solid #E5E7EB",
+            fontSize: 13,
+            lineHeight: 1.9,
+          }}
+        >
+          <h2 style={{ fontWeight: 700, marginBottom: 8 }}>
+            راهنمای تفسیر
+          </h2>
+          <ul style={{ paddingInlineStart: 20 }}>
+            <li>
+              <b>JS hydration FAIL</b>: فایل JS بارگذاری نشده / خطای syntax /
+              بسته‌ی نادرست. Ctrl+Shift+R بزنید و Network tab را چک کنید.
+            </li>
+            <li>
+              <b>/api/v1/me → 401 یا 403</b>: شما وارد نشده‌اید. این طبیعی است.
+            </li>
+            <li>
+              <b>/api/v1/me → 200</b>: شما واردشده هستید. اگر admin هم می‌خواهید،
+              کاربر باید <code dir="ltr">is_staff=True</code> داشته باشد.
+            </li>
+            <li>
+              <b>/api/v1/marketplace/products → 500</b>: ستون‌های Product
+              ساخته نشده‌اند. اجرا کنید:{" "}
+              <code dir="ltr">
+                docker compose exec backend python manage.py migrate
+              </code>
+            </li>
+            <li>
+              <b>/api/v1/prices → empty</b>: کرالر اجرا نشده. اجرا کنید:{" "}
+              <code dir="ltr">make crawl-prices</code>
+            </li>
+            <li>
+              <b>هر چیز دیگری → error/timeout</b>: شبکه‌ی بین فرانت و بک‌اند
+              کار نمی‌کند. <code dir="ltr">BACKEND_URL</code> در env فرانت
+              را بررسی کنید.
+            </li>
+          </ul>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <h2 className="font-bold">راهنمای رفع اشکال سریع</h2>
-          </CardHeader>
-          <CardBody className="text-sm space-y-2">
-            <p>
-              <b>دکمه‌ها کار نمی‌کنند؟</b> یک Hard-Refresh (Ctrl+Shift+R) بزنید
-              تا کش جاوااسکریپت بازنشانی شود.
-            </p>
-            <p>
-              <b>قیمت‌ها &quot;—&quot; هستند؟</b> کرالر هنوز اجرا نشده یا
-              tgju.org از داخل کانتینر در دسترس نیست. در پنل Django Admin،
-              قسمت Price ticks یک رکورد دستی اضافه کنید یا کرالر را اجرا کنید.
-            </p>
-            <p>
-              <b>صفحه ادمین خالی است؟</b> مطمئن شوید با کاربری وارد شده‌اید که
-              <code dir="ltr"> is_staff=True </code>است (مثلاً سوپرادمین که{" "}
-              <code dir="ltr">seed_dev</code> می‌سازد).
-            </p>
-            <p>
-              <b>ستون marketplace_product.brand وجود ندارد؟</b> مهاجرت‌ها اجرا
-              نشده‌اند. دستور{" "}
-              <code dir="ltr">docker compose exec backend python manage.py migrate</code>{" "}
-              را بزنید.
-            </p>
-          </CardBody>
-        </Card>
-      </main>
-      <Footer />
-    </>
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: 12,
+            color: "#6B7280",
+            marginTop: 16,
+          }}
+        >
+          خروجی کنسول مرورگر را هم چک کنید — پیام‌های{" "}
+          <code dir="ltr">[/status]</code> نشانگر دقیق اجرای کد هستند.
+        </p>
+      </div>
+    </main>
+  );
+}
+
+const th: React.CSSProperties = {
+  textAlign: "start",
+  padding: "8px 12px",
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#6B7280",
+};
+const td: React.CSSProperties = {
+  padding: "8px 12px",
+  borderTop: "1px solid #E5E7EB",
+  fontSize: 12,
+};
+
+function StatusBadge({ status }: { status: Probe["status"] }) {
+  let bg = "#F7F8FA",
+    fg = "#6B7280",
+    txt = String(status);
+  if (status === "pending") {
+    txt = "…";
+  } else if (status === "error") {
+    bg = "#FEE2E2";
+    fg = "#DC2626";
+    txt = "error";
+  } else if (typeof status === "number") {
+    if (status >= 200 && status < 300) {
+      bg = "#DCFCE7";
+      fg = "#16A34A";
+    } else if (status === 401 || status === 403) {
+      bg = "#FEF3C7";
+      fg = "#A16207";
+    } else {
+      bg = "#FEE2E2";
+      fg = "#DC2626";
+    }
+    txt = `HTTP ${status}`;
+  }
+  return (
+    <span
+      style={{
+        background: bg,
+        color: fg,
+        padding: "2px 8px",
+        borderRadius: 4,
+        fontSize: 11,
+        fontWeight: 700,
+      }}
+    >
+      {txt}
+    </span>
   );
 }
