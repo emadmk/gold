@@ -1,4 +1,7 @@
 # ---- Python / Django ----
+# (Patterns kept specific so they don't accidentally swallow application
+# directories such as `frontend/lib/` — only virtual-env lib trees should
+# be excluded, and those live under `.venv/`, `venv/`, etc.)
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,8 +13,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
